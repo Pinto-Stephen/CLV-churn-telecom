@@ -1,10 +1,10 @@
 clv_tercile,risk_tercile,n_customers,mean_clv,mean_p_churn,recommended_action
-Low,Low,2,66.8877202578458,0.2568846642971039,No action needed
-Low,Medium,384,76.57194385674872,0.5708325198696306,Monitor only
-Low,High,1261,63.64561769522758,0.8061481465620242,"Low-cost automated save offer, or deprioritize"
-Medium,Low,286,198.7181597882146,0.2658137313539644,Light-touch engagement
-Medium,Medium,996,162.73648745635222,0.5021405532716747,Standard lifecycle nurture
-Medium,High,365,128.42938541272127,0.7231513246771408,Targeted save offer -- moderate value genuinely at risk
-High,Low,1359,1135.723400142094,0.10875686297780472,"Loyalty rewards / monitor -- valuable and stable, low urgency"
-High,Medium,278,426.9109261546806,0.45815691384051344,Proactive check-in -- protect a valuable relationship showing some risk
-High,High,10,399.4863990019295,0.7193309342861176,"Priority retention outreach -- high value, high risk"
+Low,Low,2,66.8877202578458,0.2568846635520458,No action needed
+Low,Medium,390,76.55029183111958,0.5723206493487725,Monitor only
+Low,High,1255,63.59054704425246,0.8068107152745068,"Low-cost automated save offer, or deprioritize"
+Medium,Low,286,198.7181597882146,0.2658137313813179,Light-touch engagement
+Medium,Medium,1000,162.79148554888073,0.5028022346615791,Standard lifecycle nurture
+Medium,High,361,127.89690203127242,0.7237672838808097,Targeted save offer -- moderate value genuinely at risk
+High,Low,1359,1135.723400142094,0.1087568627733969,"Loyalty rewards / monitor -- valuable and stable, low urgency"
+High,Medium,279,426.7581601534352,0.45890746582366226,Proactive check-in -- protect a valuable relationship showing some risk
+High,High,9,401.17497535689586,0.7250831498040093,"Priority retention outreach -- high value, high risk"

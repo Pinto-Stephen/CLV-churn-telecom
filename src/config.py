@@ -68,7 +68,6 @@ class ChurnConfig:
     test_size: float
     cv_folds: int
     random_search_iterations: int
-    calibration_brier_threshold: float
     xgb_param_distributions: dict[str, list[Any]]
 
 

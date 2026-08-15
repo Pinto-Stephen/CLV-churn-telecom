@@ -65,10 +65,14 @@ assigns `p_alive = 1.0` identically to every customer with zero repeat purchases
 mathematical property of the model, confirmed on all 1,615 one-time buyers in this
 data), yet 73.1% of those same one-time buyers are labelled "churned" by the 6-month
 window simply because they haven't had time to reorder yet. That collision drives the
-pooled `1 - p_alive` baseline AUC **below 0.5** (0.412) even though, restricted to
-repeat buyers only, the same score reaches **AUC 0.746** -- right where a churn score
-built on recency/frequency/tenure should land. See `src/churn.py::compute_baselines`
-for the diagnostic that surfaces this on every run.
+pooled `1 - p_alive` baseline AUC **below 0.5** (0.412) -- a degenerate number, not a
+baseline anyone should be benchmarked against. Restricted to a held-out split of
+repeat buyers only (the population BG/NBD is actually valid for), the same score
+reaches **AUC 0.728**. See the `repeat_buyers_only` track in `reports/churn_metrics.csv`
+(produced by `src/churn.py::train_churn_model`) for the full comparison this collision
+motivates -- the pooled and repeat-buyer-only numbers are not interchangeable, and the
+project reports incremental AUC only within the repeat-buyer track for exactly this
+reason (see Churn model results below).
 
 **Data loss from dropping anonymous transactions.** 23.1% of order lines
 (234,437 of 1,013,932 post-cancellation-split rows) have no `customer_id` and are
@@ -125,79 +129,175 @@ frequency bucket, including the long tail of high-frequency wholesale-style buye
 
 ## Churn model results
 
-989-customer held-out test set (80/20 stratified split; 5-fold stratified CV AUC for
-the tuned XGBoost was 0.8125 ± 0.0115). The honest framing: **BG/NBD's `p_alive` is
-already a meaningful churn signal on its own (AUC 0.746 among repeat buyers), so
-XGBoost's contribution is judged by its incremental AUC over that baseline, not
-reported as if the baseline were zero.**
+**Proxy-churn base rate:** 47.9% overall (4,941 customers) -- but that single number
+hides two very different populations: **73.1%** among the 1,615 one-time buyers (who
+mostly haven't had time to reorder, not genuinely lost) vs. **35.6%** among the 3,326
+repeat buyers. Every AUC/Brier number below should be read against the population it
+was computed on, not the pooled rate.
 
-| Model | AUC | Brier | Incremental AUC over `1 - p_alive` |
+This project evaluates the churn classifier on **two tracks**, not one: **pooled** (all
+4,941 customers, an 80/20 stratified split, 989-customer test set) and
+**repeat-buyers-only** (the 3,326 customers with calibration-window frequency > 0, its
+own independent 80/20 split, 666-customer test set). The repeat-buyer track exists
+because the pooled `1 - p_alive` baseline is degenerate (see the proxy-label section
+above) -- BG/NBD assigns `p_alive = 1.0` identically to every one-time buyer, which
+collides with the 73.1% of them labelled "churned" by the proxy and drags the pooled
+`1 - p_alive` AUC to 0.412, *below random*. Benchmarking XGBoost's contribution against
+a below-random reference inflates every "incremental AUC" computed against it -- the
+giveaway in an earlier version of this table was a Majority-class row showing +0.088
+incremental AUC, which is impossible by construction (majority class has zero
+discriminative signal). Incremental AUC is therefore reported **only** on the
+repeat-buyer track, against its own real 1−p_alive reference.
+
+**Pooled track** (5-fold CV AUC for the tuned XGBoost: 0.8125 ± 0.0115):
+
+| Model | AUC | Brier |
+|---|---:|---:|
+| Majority class | 0.500 | 0.250 |
+| 1 − p_alive (BG/NBD, no ML) | 0.412 *(degenerate -- see above, not a baseline)* | -- |
+| Recency alone | 0.767 | -- |
+| Logistic regression (RFM primitives) | 0.798 | 0.183 |
+| XGBoost (tuned, raw) | 0.810 | 0.179 |
+| **XGBoost (tuned, isotonic calibrated)** | **0.810** | **0.178** |
+
+**Repeat-buyers-only track** (5-fold CV AUC: 0.7895 ± 0.0137) -- this is the fair
+comparison, because it's the population BG/NBD's `p_alive` is actually valid for:
+
+| Model | AUC | Brier | Incremental AUC over `1 − p_alive` |
 |---|---:|---:|---:|
-| Majority class | 0.500 | 0.250 | +0.088 |
-| 1 − p_alive (BG/NBD, no ML) | 0.412 | -- | +0.000 (reference) |
-| Recency alone | 0.767 | -- | +0.355 |
-| Logistic regression (RFM primitives) | 0.798 | 0.183 | +0.386 |
-| **XGBoost (tuned, isotonic calibrated)** | **0.810** | **0.178** | **+0.398** |
+| Majority class | 0.500 | 0.229 | n/a *(no signal by construction -- see note)* |
+| **1 − p_alive (BG/NBD, no ML)** | **0.728** | -- | +0.000 (reference) |
+| Recency alone | 0.719 | -- | −0.009 |
+| Logistic regression (RFM primitives) | 0.760 | 0.190 | +0.033 |
+| XGBoost (tuned, raw) | 0.798 | 0.189 | +0.071 |
+| **XGBoost (tuned, isotonic calibrated)** | **0.796** | **0.175** | **+0.068** |
 
-The tuned XGBoost's raw Brier score (0.1785) exceeded the 0.05 calibration threshold
-in `config.yaml`, so it was automatically wrapped in `CalibratedClassifierCV(isotonic)`
-per `src/churn.py::calibrate_if_needed` (raw AUC 0.8097 -> calibrated 0.8103; Brier
-0.1785 -> 0.1780). Calibration matters here specifically because `allocate.py`
-multiplies `clv_12m` by `p_churn` directly -- a well-ranked but poorly-calibrated
-probability would silently distort the retention budget.
+The XGBoost increment is **+0.068 AUC, 95% CI [+0.042, +0.094], p = 0.001** (paired
+bootstrap, 2,000 resamples, same 666 held-out customers for both scores). It's real,
+but modest -- and that's expected: `p_alive` is itself one of XGBoost's input
+features, so +0.068 is the incremental value of the calibration-window basket,
+breadth, and trend features layered *on top of* BG/NBD's signal, not XGBoost
+re-deriving that signal from scratch. (Full mechanism: `p_churn` correlates at
+ρ ≈ −0.85 with both `recency_ratio` and `purchase_rate` alone -- see Segment summary
+below -- which leaves little headroom for anything else to add.)
 
-SHAP feature importance (`reports/figures/shap_summary.png`) puts `recency_ratio`,
-`purchase_rate`, and `days_since_last_purchase` at the top, with `p_alive` itself
-ranking 5th -- consistent with the incremental-AUC framing above: BG/NBD contributes
-real signal, and XGBoost adds calibration-window basket, breadth, and trend features
-on top of it.
+Note the two baseline orderings differ: on the pooled population, raw recency (0.767)
+beats the degenerate pooled `1 - p_alive` (0.412) by a wide margin. On repeat buyers,
+that flips -- `1 - p_alive` (0.728) beats raw recency (0.719). On the population BG/NBD
+is actually valid for, its dropout-process structure edges out a single recency
+number, which is the result you'd hope for from a purpose-built model.
+
+**Calibration is applied unconditionally, not gated behind a threshold.** A prior
+version wrapped the tuned model in `CalibratedClassifierCV(isotonic)` only if its raw
+Brier exceeded a 0.05 config threshold -- but at this dataset's ~48% base rate, the
+majority-class Brier alone is ~0.25, five times that threshold, so the conditional
+fired on every run regardless of the model's actual calibration and was decorative.
+`src/churn.py::calibrate_model` now always calibrates and always reports both raw and
+calibrated metrics (both rows above), because `allocate.py` multiplies `clv_12m` by
+`p_churn` directly -- a well-ranked but poorly-calibrated probability would silently
+distort the retention budget regardless of whether some threshold happened to fire.
+
+SHAP feature importance (`reports/figures/shap_summary.png`, recomputed against the
+current model) puts `recency_ratio`, `purchase_rate`, and `days_since_last_purchase`
+at the top, with `p_alive` ranking 5th behind `n_distinct_months_active` --
+consistent with the incremental-AUC framing above: BG/NBD contributes real signal, and
+XGBoost adds calibration-window basket, breadth, and trend features on top of it.
 
 ## Retention budget allocation
 
-At the default assumptions (`total_budget=5000`, `cost_per_customer=5.0`,
-`uplift=0.20`), four strategies were simulated selecting the same number of customers
-from the same $5,000 budget:
+### CLV and churn risk are not independent axes in this dataset
 
-| Strategy | Net expected value retained |
-|---|---:|
-| Random selection | 9,338 |
-| Top-CLV only (ignores risk) | 11,978 |
-| Top-churn-risk only (ignores value) | 6,177 |
-| **Risk-weighted `expected_save` ranking** | **25,682** |
+Before the strategy comparison, the finding that shapes how to read it: `clv_12m` and
+`p_churn` are not two independent signals here, they are **largely the same signal
+viewed twice**. Spearman rank correlation between them is **ρ = −0.885** -- not
+"correlated," effectively close to the same variable measured twice. A chi-square test
+on the 3×3 CLV-tercile × risk-tercile contingency table rejects independence outright
+(χ² = 3931.36, dof = 4, p < 0.001), though at n≈4,900 that test was always going to
+reject; the coefficient (ρ = −0.885) is the finding, not the p-value.
+
+The mechanism is structural, not coincidental: both quantities load heavily on the
+same two RFM primitives --
+
+| | vs. `recency_ratio` | vs. `purchase_rate` |
+|---|---:|---:|
+| `clv_12m` | ρ = +0.656 | ρ = +0.700 |
+| `p_churn` | ρ = −0.850 | ρ = −0.853 |
+
+-- because both are, by construction, functions of the same calibration-window
+purchase history: BG/NBD's `p_alive` and `clv_12m` are fit directly on
+frequency/recency/T, and the churn features are engineered from that same history.
+This is expected behaviour for non-contractual transactional retail data, not a data
+quality problem -- a contractual setting with observed cancellations and richer
+covariates would likely separate the two signals more. Full stats and the
+observed-vs-expected contingency tables: `reports/clv_risk_dependence.txt`.
+
+![CLV vs. churn risk](reports/figures/clv_vs_risk.png)
+
+**Practical consequence:** the "valuable and genuinely at risk" quadrant that
+motivates risk-weighted targeting in the first place is nearly empty --
+**9 of 4,941 customers**. The allocation below is mostly separating "worth the
+intervention cost" from "not worth it" along one value/engagement axis, rather than
+resolving a genuine tension between two independent signals.
+
+| CLV | Risk | Customers | Mean CLV | Mean p(churn) | Recommended action |
+|---|---|---:|---:|---:|---|
+| High | High | 9 | £401 | 0.725 | Priority retention outreach |
+| High | Medium | 279 | £427 | 0.459 | Proactive check-in |
+| High | Low | 1,359 | £1,136 | 0.109 | Loyalty rewards / monitor |
+| Medium | High | 361 | £128 | 0.724 | Targeted save offer |
+| Medium | Medium | 1,000 | £163 | 0.503 | Standard lifecycle nurture |
+| Medium | Low | 286 | £199 | 0.266 | Light-touch engagement |
+| Low | High | 1,255 | £64 | 0.807 | Low-cost automated save offer, or deprioritize |
+| Low | Medium | 390 | £77 | 0.572 | Monitor only |
+| Low | Low | 2 | £67 | 0.257 | No action needed |
+
+Full table: `reports/segment_summary.csv`. Full per-customer allocation:
+`reports/allocation.csv`.
+
+### What each ranking selects
+
+At the default assumptions (`total_budget=5000`, `cost_per_customer=5.0`,
+`uplift=0.20`), four rankings were compared selecting the same ~1,000 customers from
+the same £5,000 budget:
+
+| Strategy | Net value (risk-weighted objective) | Mean selected CLV | Mean selected p(churn) |
+|---|---:|---:|---:|
+| Random selection | 9,338 ± 727 *(std, 100 resamples)* | £409 | 0.477 |
+| Top-CLV only (ignores risk) | 11,978 | £1,457 | 0.091 |
+| Top-churn-risk only (ignores value) | 6,177 | £68 | 0.839 |
+| **Risk-weighted `expected_save` ranking** | **25,682** | £812 | 0.452 |
 
 ![Allocation strategy comparison](reports/figures/allocation_comparison.png)
 
-This gap is the business case for the whole project: spending on your most valuable
-customers wastes budget on people who weren't leaving (Top-CLV nets less than half of
-risk-weighted); spending on your highest-risk customers wastes budget on people who
-are cheap to flag as risky but not worth saving (Top-churn-risk nets less than a
-quarter of risk-weighted).
+**This table is not a measurement of realised lift.** "Net value" is computed from
+`clv_12m × p_churn × uplift`, the exact quantity the risk-weighted strategy is built to
+maximise -- a strategy cannot lose a contest scored on its own objective function, so
+risk-weighted "winning" here is arithmetic, not empirical evidence. The only rigorous
+way to measure real lift is the randomised holdout test described in the caveats
+above. What the table *does* legitimately show is what each ranking selects, and the
+extra columns make both naive strategies' failure modes symmetric and quantified
+rather than one asserted and one not:
+
+- **Top-churn-risk-only** selects customers worth only **£68 on average** (vs. £409
+  random) -- there's little value to protect in the first place, given the CLV/risk
+  collapse above, so the flat per-customer cost eats most of their small expected
+  return. That's why this strategy nets *below random selection*.
+- **Top-CLV-only** selects customers with mean p(churn) of just **0.091** (vs. 0.477
+  random) -- despite averaging £1,457 in CLV (1.8× the risk-weighted strategy), at
+  ρ = −0.885 the highest-CLV customers are almost by construction the lowest-risk
+  ones, so there's little expected loss left to prevent.
+
+Both are the same CLV/risk collapse, viewed from opposite ends of the ranking. Full
+notes and derivation: `reports/allocation_strategy_notes.txt`.
 
 The uniform-cost allocation (`allocate_uniform_cost`) is a sort by `expected_save`,
 not an optimiser -- with identical per-customer cost this is provably optimal, so it
 is not dressed up as more than it is. A variable-cost path is also implemented
 (`allocate_variable_cost_knapsack`) as a greedy-ratio approximation to 0/1 knapsack,
 using an illustrative cost that scales mildly with predicted purchase frequency; it
-selected 863 of 4,263 eligible customers, spending $4,996.90 of the $5,000 budget.
+selected 863 of 4,263 eligible customers, spending £4,996.90 of the £5,000 budget.
 
 ![Sensitivity heatmap](reports/figures/allocation_sensitivity_heatmap.png)
-
-### Segment summary (CLV tercile × churn-risk tercile)
-
-| CLV | Risk | Customers | Mean CLV | Mean p(churn) | Recommended action |
-|---|---|---:|---:|---:|---|
-| High | High | 10 | 399 | 0.719 | Priority retention outreach |
-| High | Medium | 278 | 427 | 0.458 | Proactive check-in |
-| High | Low | 1,359 | 1,136 | 0.109 | Loyalty rewards / monitor |
-| Medium | High | 365 | 128 | 0.723 | Targeted save offer |
-| Medium | Medium | 996 | 163 | 0.502 | Standard lifecycle nurture |
-| Medium | Low | 286 | 199 | 0.266 | Light-touch engagement |
-| Low | High | 1,261 | 64 | 0.806 | Low-cost automated save offer, or deprioritize |
-| Low | Medium | 384 | 77 | 0.571 | Monitor only |
-| Low | Low | 2 | 67 | 0.257 | No action needed |
-
-Full table: `reports/segment_summary.csv`. Full per-customer allocation:
-`reports/allocation.csv`.
 
 ## Reproduction
 
@@ -206,14 +306,24 @@ pip install -r requirements.txt
 # place the UCI Online Retail II workbook at dataset/raw/online-retail-II.xlsx
 python -m src.cli all            # runs load -> rfm -> btyd -> features -> churn -> allocate
 python -m src.cli all --force    # recompute every stage from scratch
-python -m pytest tests/          # 13 unit tests
+python -m pytest tests/          # 18 unit tests
 ```
+
+`requirements.txt` pins exact versions (`==`, not `>=`) for the whole verified working
+set, including transitive packages that broke a fresh install (`numba`, `pytensor`,
+`arviz`) -- an unpinned resolve previously landed on a numpy/pytensor/scikit-learn/
+xgboost combination that didn't import at all. `pip check` reports no conflicts against
+the pinned set.
 
 Every module is also independently runnable and importable, e.g. `python -m
 src.btyd --force`. All tunable numbers (calibration/holdout dates, MCMC sampler
 settings, gross margin, XGBoost search space, retention budget) live in
 `config.yaml`, read through `src/config.py` -- there are no magic numbers in module
-bodies. Seeds are set for numpy, XGBoost, and PyMC, so reruns reproduce.
+bodies. Seeds are set for numpy, XGBoost, and PyMC, so reruns reproduce -- see the
+Churn model results section above for how tightly: re-running the tuned XGBoost under
+an upgraded dependency stack reproduced pooled AUC to 4 decimal places and moved
+individual `p_churn` values by at most ~5×10⁻⁸ (floating-point noise from the
+xgboost version bump, not a behavioural change).
 
 ## Dataset
 

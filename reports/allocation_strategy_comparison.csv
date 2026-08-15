@@ -1,5 +1,5 @@
-strategy,net_value_retained
-Random selection,9337.936386258894
-Top-CLV only (ignores risk),11978.476058901368
-Top-churn-risk only (ignores value),6177.40626913929
-Risk-weighted expected_save,25681.90732237112
+strategy,net_value_retained,net_value_retained_std,mean_selected_clv,mean_selected_p_churn
+Random selection,9337.93637567503,726.9241161643356,409.0123925743694,0.47725962944246125
+Top-CLV only (ignores risk),11978.476029986516,,1457.019465947097,0.09114407684367615
+Top-churn-risk only (ignores value),6177.406272220162,,67.81873014641575,0.8387384340167046
+Risk-weighted expected_save,25681.907277340957,,811.8661057557017,0.4519336214572191

@@ -1,0 +1,14 @@
+Strategy comparison: what this table is, and is not, evidence of
+===================================================================
+
+NOT evidence of realised lift. net_value_retained is computed from clv_12m * p_churn * uplift, the exact objective the risk-weighted strategy is built to maximise. A strategy cannot lose a contest scored on its own objective function, so risk-weighted 'winning' this comparison is arithmetic, not an empirical finding. The only rigorous way to measure real lift is the randomised holdout test described in the README caveats (offer the intervention to a random half of the customers this ranking would select, withhold it from the other half, measure the actual difference in realised churn).
+
+Random selection baseline: mean net_value_retained = 9,337.94 +/- 726.92 (std over 100 resamples). Read the risk-weighted vs. random gap against this spread, not just the point estimate.
+
+What this table IS legitimate evidence of: what each ranking selects. The two naive strategies fail in symmetric, and now quantified, ways:
+
+  Top-churn-risk-only selects low-value customers: mean_selected_clv = £67.82, vs. £409.01 for random and £811.87 for risk-weighted. There is little value to protect in the first place (see the CLV/risk collapse in clv_risk_dependence.txt), so the flat per-customer cost consumes most of their small expected return -- which is why this strategy nets BELOW random selection (6,177.41 vs. 9,337.94).
+
+  Top-CLV-only selects low-risk customers: mean_selected_p_churn = 0.0911, vs. 0.4773 for random and 0.4519 for risk-weighted. At rho=-0.885 between clv_12m and p_churn (Fix 2), the highest-CLV customers are almost by construction the lowest-risk ones, so despite selecting customers worth £1,457.02 on average (nearly 1.8x the risk-weighted strategy's £811.87), there is little expected loss left to prevent.
+
+Both failure modes are the same underlying CLV/risk collapse, viewed from opposite ends of the ranking -- not two unrelated phenomena.

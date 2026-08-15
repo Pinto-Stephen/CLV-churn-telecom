@@ -1,0 +1,13 @@
+track,model,auc,brier,incremental_auc_over_p_alive,delta_vs_p_alive_ci_low,delta_vs_p_alive_ci_high,delta_vs_p_alive_p_value
+pooled,Majority class,0.5,0.24957062746514827,,,,
+pooled,"1 - p_alive (BG/NBD, no ML)",0.4119618204907624,,,,,
+pooled,Recency alone,0.7673343984269387,,,,,
+pooled,Logistic regression (RFM primitives),0.7981545205030519,0.18317868388584668,,,,
+pooled,"XGBoost (tuned, raw)",0.8096739174962108,0.17850105464458466,,,,
+pooled,"XGBoost (tuned, isotonic calibrated)",0.8101634509032813,0.17804769686515556,,,,
+repeat_buyers_only,Majority class,0.5,0.22922275206406587,,,,
+repeat_buyers_only,"1 - p_alive (BG/NBD, no ML)",0.727774335369272,,0.0,,,
+repeat_buyers_only,Recency alone,0.7192420800015736,,-0.008532255367698416,,,
+repeat_buyers_only,Logistic regression (RFM primitives),0.7603296843803171,0.1897326559731391,0.032555349011045065,,,
+repeat_buyers_only,"XGBoost (tuned, raw)",0.7984027224533554,0.18927933275699615,0.07062838708408337,,,
+repeat_buyers_only,"XGBoost (tuned, isotonic calibrated)",0.7955947006579918,0.17524724042490977,0.06782036528871971,0.04165341592923458,0.09417151971366844,0.0009995002498750624

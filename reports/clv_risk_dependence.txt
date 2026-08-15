@@ -1,0 +1,29 @@
+CLV vs. churn-risk dependence check
+====================================
+
+Spearman rank correlation (clv_12m, p_churn): rho = -0.8854 (p < 0.001)
+Chi-square test of independence on the 3x3 CLV-tercile x risk-tercile contingency table: chi2 = 3931.36, dof = 4 (p < 0.001)
+
+The coefficient is the finding, not the p-value: at n~5000 both tests reject independence at any conventional threshold regardless of effect size, so p only confirms the association is not sampling noise. rho = -0.885 is what says clv_12m and p_churn are, for practical purposes, close to the same variable measured twice -- far beyond ordinary correlation.
+
+Mechanism: both targets against the RFM primitives that plausibly drive both
+-----------------------------------------------------------------------------
+  clv_12m vs recency_ratio: rho = +0.6564 (p < 0.001)
+  clv_12m vs purchase_rate: rho = +0.7005 (p < 0.001)
+  p_churn vs recency_ratio: rho = -0.8499 (p < 0.001)
+  p_churn vs purchase_rate: rho = -0.8528 (p < 0.001)
+
+If both clv_12m and p_churn load heavily on recency_ratio and purchase_rate, the CLV/risk collapse above is structural -- both are functions of the same recency/frequency signal by construction (BG/NBD's p_alive and clv_12m are literally fit on frequency/recency/T; the churn features are engineered from the same calibration-window purchase history) -- not a coincidence specific to this sample. This is expected behaviour for non-contractual transactional retail data, not a data quality problem.
+
+Observed customer counts (CLV tercile x risk tercile):
+risk_tercile   Low  Medium  High
+clv_tercile                     
+Low              2     390  1255
+Medium         286    1000   361
+High          1359     279     9
+
+Expected counts under independence (same marginals, no association):
+          Low  Medium   High
+Low     549.0   556.3  541.7
+Medium  549.0   556.3  541.7
+High    549.0   556.3  541.7
