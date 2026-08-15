@@ -1,0 +1,5 @@
+strategy,net_value_retained
+Random selection,9337.936386258894
+Top-CLV only (ignores risk),11978.476058901368
+Top-churn-risk only (ignores value),6177.40626913929
+Risk-weighted expected_save,25681.90732237112
